@@ -37,7 +37,7 @@ fn main() {
     let log2 = import_xes_file(path2, options).unwrap();
 
     // set debug flag
-    let debug = true;
+    let debug = false;
 
     let time_start = Instant::now();
 
