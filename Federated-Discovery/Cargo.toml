@@ -1,0 +1,19 @@
+[package]
+name = "Federated_Discovery"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indicatif = { version = "0.17.11", features = ["rayon"] }
+process_mining = { version = "0.3.25" , features = ["graphviz-export"] }
+rand = "0.9.0"
+rayon = { version = "1.10.0" }
+tfhe = { version = "1.0.1", features = ["boolean", "shortint", "integer"] }
+
+[profile.release]
+debug = false
+strip = true
+panic = 'abort'
+opt-level = 3
+lto = true
+codegen-units = 1
