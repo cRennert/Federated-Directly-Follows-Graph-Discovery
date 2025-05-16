@@ -8,7 +8,7 @@ indicatif = { version = "0.17.11", features = ["rayon"] }
 process_mining = { version = "0.3.25" , features = ["graphviz-export"] }
 rand = "0.9.0"
 rayon = { version = "1.10.0" }
-tfhe = { version = "1.0.1", features = ["boolean", "shortint", "integer"] }
+tfhe = { version = "1.1.3", features = ["boolean", "shortint", "integer", "strings"] }
 
 [profile.release]
 debug = false
