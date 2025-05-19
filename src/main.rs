@@ -52,7 +52,7 @@ fn main() -> std::io::Result<()> {
     println!("Time elapsed is {}ms", time_elapsed);
 
     export_dfg_image_png(&result, &output_file.clone().add(".png")).unwrap();
-    let file = File::create(output_file.clone().add(".json"))?;
+    let file = File::create(output_file)?;
     let mut writer = BufWriter::new(file);
     serde_json::to_writer(&mut writer, &result.to_json())?;
     writer.flush()?;
