@@ -31,7 +31,7 @@ fn main() -> std::io::Result<()> {
     log2.traces.retain(|trace| !trace.events.is_empty());
 
     // set debug flag
-    let debug = true;
+    let debug = false;
 
     println!(
         "Start directly-follows graph discovery to be output to {}",
