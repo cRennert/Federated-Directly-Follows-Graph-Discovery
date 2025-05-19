@@ -98,5 +98,8 @@ pub fn communicate<'a>(
     org_a.update_graph_with_private_cases(&mut graph, &org_a_case_ids, &shared_case_ids);
     
     utils::recalculate_activity_counts(&mut graph);
+    graph.start_activities.insert("start".to_string());
+    graph.end_activities.insert("end".to_string());
+    
     graph
 }
