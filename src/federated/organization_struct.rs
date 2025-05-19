@@ -11,12 +11,10 @@ use rayon::prelude::*;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher, SipHasher};
 use std::ops::Not;
 use tfhe::prelude::*;
-use tfhe::{
-    generate_keys, set_server_key, ClearString, ClientKey, Config, ConfigBuilder, FheAsciiString,
-    FheBool, FheUint16, FheUint32, ServerKey,
-};
+use tfhe::{generate_keys, set_server_key, ClientKey, Config, ConfigBuilder, FheBool, FheUint16, FheUint32, FheUint64, ServerKey};
 
 /// Computes the activities present in an event log.
 ///
@@ -155,7 +153,8 @@ impl PrivateKeyOrganization {
         )
     }
 
-    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<FheAsciiString>) {
+    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<FheUint64>) {
+
         let case_ids = self
             .event_log
             .traces
@@ -185,10 +184,14 @@ impl PrivateKeyOrganization {
             .progress_with(bar)
             .with_finish(ProgressFinish::AndLeave)
             .map(|case_id| {
+                let mut hasher = SipHasher::new();
+                case_id.hash(&mut hasher);
+                let hashed_case_id = hasher.finish();
+                
                 if !self.debug {
-                    FheAsciiString::encrypt(case_id, &self.private_key)
+                    FheUint64::encrypt(hashed_case_id, &self.private_key)
                 } else {
-                    FheAsciiString::try_encrypt_trivial(case_id).unwrap()
+                    FheUint64::encrypt_trivial(hashed_case_id)
                 }
             })
             .collect();
@@ -553,7 +556,6 @@ impl PublicKeyOrganization {
         sample_encryptions: &HashMap<u16, FheUint16>,
     ) {
         self.activity_to_pos = activity_to_pos;
-        let activities_len = u16::try_from(self.activity_to_pos.len()).unwrap();
         self.start = Some(sample_encryptions.get(&(0)).unwrap().clone());
         self.end = Some(sample_encryptions.get(&(1)).unwrap().clone());
     }
@@ -586,19 +588,21 @@ impl PublicKeyOrganization {
 
     pub fn find_shared_case_ids(
         &self,
-        foreign_case_ids: &Vec<FheAsciiString>,
+        foreign_case_ids: &Vec<FheUint64>,
     ) -> Vec<(usize, FheBool)> {
         let own_case_ids = self
             .event_log
             .traces
             .par_iter()
             .map(|trace| {
+                let mut hasher = SipHasher::new();
                 self.event_log
                     .get_trace_attribute(trace, "concept:name")
                     .unwrap()
                     .value
                     .try_as_string()
-                    .unwrap()
+                    .unwrap().hash(&mut hasher);
+                hasher.finish()
             })
             .collect::<Vec<_>>();
 
@@ -622,14 +626,14 @@ impl PublicKeyOrganization {
 
     fn has_matching_case_id(
         &self,
-        foreign_case_id: &FheAsciiString,
-        own_case_ids: &Vec<&String>,
+        foreign_case_id: &FheUint64,
+        own_case_ids: &Vec<u64>,
     ) -> FheBool {
         let mut result = FheBool::not(self.true_val.clone());
 
         own_case_ids.iter().for_each(|&case_id| {
             result = foreign_case_id
-                .eq(&ClearString::new(case_id.to_string()))
+                .eq(case_id)
                 .select(&self.true_val, &result);
         });
 

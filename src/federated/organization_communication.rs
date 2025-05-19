@@ -4,7 +4,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use process_mining::dfg::DirectlyFollowsGraph;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use tfhe::{FheAsciiString, FheBool, FheUint16, FheUint32, ServerKey};
+use tfhe::{FheBool, FheUint16, FheUint32, FheUint64, ServerKey};
 
 /// The protocol for the federated computation of a directly-follows graph between two organizations
 ///
@@ -29,7 +29,7 @@ pub fn communicate<'a>(
 
     println!("Apply private set intersection");
     let time_start_psi = Instant::now();
-    let (org_a_case_ids, encrypted_case_ids): (Vec<String>, Vec<FheAsciiString>) = org_a.encrypt_all_case_ids();
+    let (org_a_case_ids, encrypted_case_ids): (Vec<String>, Vec<FheUint64>) = org_a.encrypt_all_case_ids();
     let shared_case_id_result: Vec<(usize, FheBool)> = org_b.find_shared_case_ids(&encrypted_case_ids);
     let shared_case_ids: HashSet<String> = org_a.decrypt_and_identify_shared_case_ids(&org_a_case_ids, &shared_case_id_result);
     let time_elapsed_psi = time_start_psi.elapsed().as_millis();
