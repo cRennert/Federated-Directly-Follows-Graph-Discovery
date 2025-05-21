@@ -19,6 +19,8 @@ fn main() -> std::io::Result<()> {
     let path1 = args.remove(0);
     let path2 = args.remove(0);
     let output_file = args.remove(0);
+    let debug = args.remove(0).parse::<bool>().unwrap();
+    let use_psi = args.remove(0).parse::<bool>().unwrap();
 
     // read args
     let mut options = XESImportOptions::default();
@@ -29,10 +31,6 @@ fn main() -> std::io::Result<()> {
     // Filter empty traces
     log1.traces.retain(|trace| !trace.events.is_empty());
     log2.traces.retain(|trace| !trace.events.is_empty());
-
-    // set debug flag
-    let debug = false;
-    let use_psi = false;
 
     println!(
         "Start directly-follows graph discovery to be output to {}",
