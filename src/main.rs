@@ -32,6 +32,7 @@ fn main() -> std::io::Result<()> {
 
     // set debug flag
     let debug = false;
+    let use_psi = false;
 
     println!(
         "Start directly-follows graph discovery to be output to {}",
@@ -47,7 +48,7 @@ fn main() -> std::io::Result<()> {
     let mut org_b = PublicKeyOrganization::new(log2, true_val);
 
     let result: DirectlyFollowsGraph =
-        organization_communication::communicate(&mut org_a, &mut org_b, 100);
+        organization_communication::communicate(&mut org_a, &mut org_b, 100, use_psi);
     let time_elapsed = time_start.elapsed().as_millis();
     println!("Time elapsed is {}ms", time_elapsed);
 

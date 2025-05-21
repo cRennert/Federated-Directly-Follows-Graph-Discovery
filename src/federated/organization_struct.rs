@@ -14,7 +14,10 @@ use std::convert::TryFrom;
 use std::hash::{Hash, Hasher, SipHasher};
 use std::ops::Not;
 use tfhe::prelude::*;
-use tfhe::{generate_keys, set_server_key, ClientKey, Config, ConfigBuilder, FheBool, FheUint16, FheUint32, FheUint64, ServerKey};
+use tfhe::{
+    generate_keys, set_server_key, ClientKey, Config, ConfigBuilder, FheBool, FheUint16, FheUint32,
+    FheUint64, ServerKey,
+};
 
 /// Computes the activities present in an event log.
 ///
@@ -153,8 +156,23 @@ impl PrivateKeyOrganization {
         )
     }
 
-    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<FheUint64>) {
+    pub fn get_all_case_ids(&self) -> Vec<String> {
+        self.event_log
+            .traces
+            .iter()
+            .map(|trace| {
+                self.event_log
+                    .get_trace_attribute(trace, "concept:name")
+                    .unwrap()
+                    .value
+                    .try_as_string()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect()
+    }
 
+    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<FheUint64>) {
         let case_ids = self
             .event_log
             .traces
@@ -187,7 +205,7 @@ impl PrivateKeyOrganization {
                 let mut hasher = SipHasher::new();
                 case_id.hash(&mut hasher);
                 let hashed_case_id = hasher.finish();
-                
+
                 if !self.debug {
                     FheUint64::encrypt(hashed_case_id, &self.private_key)
                 } else {
@@ -589,6 +607,8 @@ impl PublicKeyOrganization {
     pub fn find_shared_case_ids(
         &self,
         foreign_case_ids: &Vec<FheUint64>,
+        case_id_hom_comparisons: &mut u64,
+        case_id_hom_selections: &mut u64,
     ) -> Vec<(usize, FheBool)> {
         let own_case_ids = self
             .event_log
@@ -601,7 +621,8 @@ impl PublicKeyOrganization {
                     .unwrap()
                     .value
                     .try_as_string()
-                    .unwrap().hash(&mut hasher);
+                    .unwrap()
+                    .hash(&mut hasher);
                 hasher.finish()
             })
             .collect::<Vec<_>>();
@@ -615,26 +636,72 @@ impl PublicKeyOrganization {
             .unwrap(),
         );
 
-        foreign_case_ids
+        let partial_result = foreign_case_ids
             .par_iter()
             .enumerate()
             .progress_with(bar)
             .with_finish(ProgressFinish::AndLeave)
-            .map(|(pos, case_id)| (pos, self.has_matching_case_id(case_id, &own_case_ids)))
+            .map(|(pos, case_id)| {
+                let mut curr_case_id_hom_comparisons = 0;
+                let mut curr_case_id_hom_selections = 0;
+                let is_matching: FheBool = self.has_matching_case_id(
+                    case_id,
+                    &own_case_ids,
+                    &mut curr_case_id_hom_comparisons,
+                    &mut curr_case_id_hom_selections,
+                );
+                (
+                    pos,
+                    is_matching,
+                    curr_case_id_hom_comparisons,
+                    curr_case_id_hom_selections,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        partial_result
+            .iter()
+            .for_each(|(_, _, hom_comparisons, hom_selections)| {
+                *case_id_hom_comparisons += hom_comparisons;
+                *case_id_hom_selections += hom_selections;
+            });
+
+        partial_result
+            .par_iter()
+            .map(|(pos, is_matching, _, _)| (*pos, is_matching.to_owned()))
             .collect::<Vec<_>>()
+    }
+
+    pub fn get_all_case_ids(&self) -> HashSet<String> {
+        self.event_log
+            .traces
+            .iter()
+            .map(|trace| {
+                self.event_log
+                    .get_trace_attribute(trace, "concept:name")
+                    .unwrap()
+                    .value
+                    .try_as_string()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect()
     }
 
     fn has_matching_case_id(
         &self,
         foreign_case_id: &FheUint64,
         own_case_ids: &Vec<u64>,
+        case_id_hom_comparisons: &mut u64,
+        case_id_sel_hom_comparisons: &mut u64,
     ) -> FheBool {
         let mut result = FheBool::not(self.true_val.clone());
+        *case_id_sel_hom_comparisons += 1;
 
         own_case_ids.iter().for_each(|&case_id| {
-            result = foreign_case_id
-                .eq(case_id)
-                .select(&self.true_val, &result);
+            result = foreign_case_id.eq(case_id).select(&self.true_val, &result);
+            *case_id_hom_comparisons += 1;
+            *case_id_sel_hom_comparisons += 1;
         });
 
         result
@@ -715,13 +782,18 @@ impl PublicKeyOrganization {
         start_case: usize,
         upper_bound: usize,
         bar: &ProgressBar,
+        timestamp_hom_comparisons: &mut u64, 
+        selection_hom_comparisons: &mut u64,
     ) -> Vec<(FheUint16, FheUint16)> {
-        let mut result: Vec<(FheUint16, FheUint16)> = self
+        let intermediate_result: Vec<(Vec<(FheUint16, FheUint16)>, u64, u64)> = self
             .all_case_names
             .get(start_case..upper_bound)
             .unwrap()
             .par_iter()
-            .flat_map(|case_name| {
+            .map(|case_name| {
+                let mut local_timestamp_hom_comparisons: u64 = 0;
+                let mut local_selection_hom_comparisons: u64 = 0;
+                
                 let (foreign_activities, foreign_timestamps) = self
                     .foreign_case_to_trace
                     .get(case_name)
@@ -739,13 +811,24 @@ impl PublicKeyOrganization {
                     foreign_timestamps,
                     own_activities,
                     own_timestamps,
+                    &mut local_timestamp_hom_comparisons,
+                    &mut local_selection_hom_comparisons,
                 );
 
                 bar.inc(1);
-                intermediate_result
+                (intermediate_result, local_timestamp_hom_comparisons, local_selection_hom_comparisons)
             })
-            .collect();
+            .collect::<Vec<_>>();
 
+        intermediate_result.iter().for_each(|(_, local_timestamp_hom_comparisons, local_selection_hom_comparisons)| {
+            *timestamp_hom_comparisons += local_timestamp_hom_comparisons;
+            *selection_hom_comparisons += local_selection_hom_comparisons;
+        });
+        
+        let mut result = intermediate_result.iter().flat_map(|(edges, _, _)| {
+            edges.to_owned()
+        }).collect::<Vec<_>>();
+        
         result.shuffle(&mut rng());
         result
     }
@@ -759,6 +842,8 @@ impl PublicKeyOrganization {
         foreign_timestamps: Vec<FheUint32>,
         own_activities: Vec<FheUint16>,
         own_timestamps: Vec<u32>,
+        timestamp_hom_comparisons: &mut u64,
+        selection_hom_comparisons: &mut u64,
     ) -> Vec<(FheUint16, FheUint16)> {
         let mut result: Vec<(FheUint16, FheUint16)> = Vec::new();
 
@@ -778,6 +863,7 @@ impl PublicKeyOrganization {
                 let own_less_foreign = foreign_less_equal_own.clone().not();
                 comparison_foreign_to_own.insert((i, j), foreign_less_equal_own);
                 comparison_own_to_foreign.insert((j, i), own_less_foreign);
+                *timestamp_hom_comparisons += 2;
             }
         }
 
@@ -789,10 +875,11 @@ impl PublicKeyOrganization {
                 .unwrap()
                 .select(&foreign_activities[0], &own_activities[0]),
         ));
+        *selection_hom_comparisons += 1;
 
         result.extend(
             (0..foreign_activities.len() - 1)
-                .into_par_iter()
+                .into_iter()
                 .map(|i| {
                     (
                         foreign_activities.get(i).unwrap().clone(),
@@ -802,6 +889,7 @@ impl PublicKeyOrganization {
                             &own_activities,
                             &comparison_foreign_to_own,
                             &comparison_own_to_foreign,
+                            selection_hom_comparisons,
                         ),
                     )
                 })
@@ -810,7 +898,7 @@ impl PublicKeyOrganization {
 
         result.extend(
             (0..own_activities.len() - 1)
-                .into_par_iter()
+                .into_iter()
                 .map(|j| {
                     (
                         own_activities.get(j).unwrap().clone(),
@@ -820,6 +908,7 @@ impl PublicKeyOrganization {
                             &foreign_activities,
                             &comparison_own_to_foreign,
                             &comparison_foreign_to_own,
+                            selection_hom_comparisons,
                         ),
                     )
                 })
@@ -834,7 +923,8 @@ impl PublicKeyOrganization {
                 &comparison_foreign_to_own,
             ),
         ));
-
+        *selection_hom_comparisons += 1;
+        
         result.push((
             own_activities.last().unwrap().clone(),
             self.handle_last(
@@ -843,6 +933,7 @@ impl PublicKeyOrganization {
                 &comparison_own_to_foreign,
             ),
         ));
+        *selection_hom_comparisons += 1;
 
         result
     }
@@ -903,6 +994,7 @@ impl PublicKeyOrganization {
         other_activities: &Vec<FheUint16>,
         comparison_this_to_other: &HashMap<(usize, usize), FheBool>,
         comparison_other_to_this: &HashMap<(usize, usize), FheBool>,
+        selection_hom_comparisons: &mut u64,
     ) -> FheUint16 {
         let mut result: FheUint16 = next_activity.clone();
 
@@ -911,10 +1003,13 @@ impl PublicKeyOrganization {
                 .get(&(i, pos + 1))
                 .unwrap()
                 .select(other_activities.get(i).unwrap(), next_activity);
+            *selection_hom_comparisons += 1;
+            
             result = comparison_this_to_other
                 .get(&(pos, i))
                 .unwrap()
                 .select(&intermediate_result, &result);
+            *selection_hom_comparisons += 1;
         }
 
         result
