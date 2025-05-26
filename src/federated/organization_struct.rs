@@ -714,7 +714,7 @@ impl PublicKeyOrganization {
         &mut self,
         mut foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>,
     ) {
-        let max_activities: u16 = u16::try_from(self.activity_to_pos.len() - 3).unwrap_or(0);
+        let max_activities: u16 = u16::try_from(self.activity_to_pos.len() - 1).unwrap_or(0);
 
         let len = foreign_case_to_trace.len() as u64;
         let bar = ProgressBar::new(len);
