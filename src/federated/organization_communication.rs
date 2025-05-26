@@ -27,7 +27,7 @@ pub fn communicate<'a>(
     let mut case_id_hom_selections: u64 = 0;
     let mut timestamp_hom_comparisons: u64 = 0;
     let mut selection_hom_comparisons: u64 = 0;
-    
+
     println!("Start communication");
 
     println!("Exchange keys");
@@ -39,13 +39,16 @@ pub fn communicate<'a>(
     if use_psi {
         println!("Apply private set intersection");
         let time_start_psi = Instant::now();
-        let result_encryption_case_id_a: (Vec<String>, Vec<FheUint64>) =
+        let result_encryption_case_id_a: (Vec<String>, Vec<u64>) =
             org_a.encrypt_all_case_ids();
         org_a_case_ids = result_encryption_case_id_a.0;
         let encrypted_case_ids = result_encryption_case_id_a.1;
 
-        let shared_case_id_result: Vec<(usize, FheBool)> =
-            org_b.find_shared_case_ids(&encrypted_case_ids, &mut case_id_hom_comparisons, &mut case_id_hom_selections);
+        let shared_case_id_result: Vec<(usize, bool)> = org_b.find_shared_case_ids(
+            &encrypted_case_ids,
+            &mut case_id_hom_comparisons,
+            &mut case_id_hom_selections,
+        );
         shared_case_ids =
             org_a.decrypt_and_identify_shared_case_ids(&org_a_case_ids, &shared_case_id_result);
         let time_elapsed_psi = time_start_psi.elapsed().as_millis();
@@ -70,7 +73,7 @@ pub fn communicate<'a>(
     let activities_b: HashSet<String> = org_b.find_activities();
     let agreed_activity_to_pos: HashMap<String, usize> =
         org_a.update_with_foreign_activities(activities_b);
-    let mut sample_encryptions: HashMap<u16, FheUint16> = org_a.provide_sample_encryptions();
+    let mut sample_encryptions: HashMap<u16, u16> = org_a.provide_sample_encryptions();
     org_b.sanitize_sample_encryptions(&mut sample_encryptions);
 
     org_b.set_activity_to_pos(agreed_activity_to_pos, &sample_encryptions);
@@ -82,7 +85,7 @@ pub fn communicate<'a>(
 
     println!("Encrypt & encode data for organization A");
     let time_start_encrypt_org_a = Instant::now();
-    let org_a_encrypted_data: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> =
+    let org_a_encrypted_data: HashMap<String, (Vec<u16>, Vec<u32>)> =
         org_a.encrypt_all_data(&shared_case_ids);
     org_b.set_foreign_case_to_trace(org_a_encrypted_data);
     org_b.compute_all_case_names();
@@ -138,8 +141,13 @@ pub fn communicate<'a>(
                 upper_bound = step + window_size;
             }
 
-            let org_b_secrets: Vec<(FheUint16, FheUint16)> =
-                org_b.find_all_secrets(step, upper_bound, &progress_cases, &mut timestamp_hom_comparisons, &mut selection_hom_comparisons);
+            let org_b_secrets: Vec<(u16, u16)> = org_b.find_all_secrets(
+                step,
+                upper_bound,
+                &progress_cases,
+                &mut timestamp_hom_comparisons,
+                &mut selection_hom_comparisons,
+            );
             org_a.decrypt_edges(org_b_secrets, &progress_decryption)
         })
         .collect::<Vec<(u16, u16)>>();
@@ -183,13 +191,25 @@ pub fn communicate<'a>(
         time_elapsed_computing_dfg
     );
 
-    if use_psi{
-        println!("Number of case ID equality comparisons: {}", case_id_hom_comparisons);
-        println!("Number of PSI if then else statements: {}", case_id_hom_selections);
+    if use_psi {
+        println!(
+            "Number of case ID equality comparisons: {}",
+            case_id_hom_comparisons
+        );
+        println!(
+            "Number of PSI if then else statements: {}",
+            case_id_hom_selections
+        );
     }
-    
-    println!("Number of homomorphic timestamp comparions: {}", timestamp_hom_comparisons);
-    println!("Number of homomorphic if then else statements: {}", selection_hom_comparisons);
-    
+
+    println!(
+        "Number of homomorphic timestamp comparions: {}",
+        timestamp_hom_comparisons
+    );
+    println!(
+        "Number of homomorphic if then else statements: {}",
+        selection_hom_comparisons
+    );
+
     graph
 }

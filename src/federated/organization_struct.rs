@@ -107,38 +107,42 @@ impl PrivateKeyOrganization {
     ///
     /// Encrypts a timestamp using the private key
     ///
-    pub fn encrypt_timestamp(&self, value: u32, private_key: &ClientKey) -> FheUint32 {
-        if self.debug {
-            FheUint32::encrypt_trivial(value)
-        } else {
-            FheUint32::encrypt(value, private_key)
-        }
+    pub fn encrypt_timestamp(&self, value: u32, private_key: &ClientKey) -> u32 {
+        // if self.debug {
+        //     u32::encrypt_trivial(value)
+        // } else {
+        //     u32::encrypt(value, private_key)
+        // }
+        value
     }
 
     ///
     /// Encrypts an encoded activity using the private key.
     ///
-    pub fn encrypt_activity(&self, value: u16, private_key: &ClientKey) -> FheUint16 {
-        if self.debug {
-            FheUint16::encrypt_trivial(value)
-        } else {
-            FheUint16::encrypt(value, private_key)
-        }
+    pub fn encrypt_activity(&self, value: u16, private_key: &ClientKey) -> u16 {
+        // if self.debug {
+        //     u16::encrypt_trivial(value)
+        // } else {
+        //     u16::encrypt(value, private_key)
+        // }
+        value
     }
 
-    pub fn encrypt_true(&self) -> FheBool {
-        if self.debug {
-            FheBool::encrypt_trivial(true)
-        } else {
-            FheBool::encrypt(true, &self.private_key)
-        }
+    pub fn encrypt_true(&self) -> bool {
+        // if self.debug {
+        //     bool::encrypt_trivial(true)
+        // } else {
+        //     bool::encrypt(true, &self.private_key)
+        // }
+        true
     }
 
     ///
     /// Decrypts an encrypted activity using the private key.
     ///
-    fn decrypt_activity(&self, val: FheUint16) -> u16 {
-        val.decrypt(&self.private_key)
+    fn decrypt_activity(&self, val: u16) -> u16 {
+        // val.decrypt(&self.private_key)
+        val
     }
 
     ///
@@ -147,7 +151,7 @@ impl PrivateKeyOrganization {
     pub fn encrypt_all_data(
         &self,
         shared_case_ids: &HashSet<String>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> {
+    ) -> HashMap<String, (Vec<u16>, Vec<u32>)> {
         self.compute_case_to_trace_with_encryption(
             &self.activity_to_pos,
             &self.private_key,
@@ -172,7 +176,7 @@ impl PrivateKeyOrganization {
             .collect()
     }
 
-    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<FheUint64>) {
+    pub fn encrypt_all_case_ids(&self) -> (Vec<String>, Vec<u64>) {
         let case_ids = self
             .event_log
             .traces
@@ -206,11 +210,12 @@ impl PrivateKeyOrganization {
                 case_id.hash(&mut hasher);
                 let hashed_case_id = hasher.finish();
 
-                if !self.debug {
-                    FheUint64::encrypt(hashed_case_id, &self.private_key)
-                } else {
-                    FheUint64::encrypt_trivial(hashed_case_id)
-                }
+                hashed_case_id
+                // if !self.debug {
+                //     FheUint64::encrypt(hashed_case_id, &self.private_key)
+                // } else {
+                //     FheUint64::encrypt_trivial(hashed_case_id)
+                // }
             })
             .collect();
 
@@ -220,12 +225,12 @@ impl PrivateKeyOrganization {
     pub fn decrypt_and_identify_shared_case_ids(
         &self,
         own_case_ids: &Vec<String>,
-        case_id_check_result: &Vec<(usize, FheBool)>,
+        case_id_check_result: &Vec<(usize, bool)>,
     ) -> HashSet<String> {
         case_id_check_result
             .par_iter()
             .filter_map(|(id, enc_bool)| {
-                if FheBool::decrypt(enc_bool, &self.private_key) {
+                if *enc_bool {
                     Some(own_case_ids.get(*id).unwrap().to_string())
                 } else {
                     None
@@ -292,9 +297,9 @@ impl PrivateKeyOrganization {
         activity_to_pos: &HashMap<String, usize>,
         private_key: &ClientKey,
         trace: &Trace,
-    ) -> (Vec<FheUint16>, Vec<FheUint32>) {
-        let mut activities: Vec<FheUint16> = Vec::with_capacity(trace.events.len());
-        let mut timestamps: Vec<FheUint32> = Vec::with_capacity(trace.events.len());
+    ) -> (Vec<u16>, Vec<u32>) {
+        let mut activities: Vec<u16> = Vec::with_capacity(trace.events.len());
+        let mut timestamps: Vec<u32> = Vec::with_capacity(trace.events.len());
 
         let classifier = EventLogClassifier::default();
 
@@ -318,7 +323,7 @@ impl PrivateKeyOrganization {
         private_key: &ClientKey,
         event_log: &EventLog,
         shared_case_ids: &HashSet<String>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> {
+    ) -> HashMap<String, (Vec<u16>, Vec<u32>)> {
         let name_to_trace: HashMap<&String, &Trace> = utils::find_name_trace_dictionary(event_log);
         let name_to_trace_vec: Vec<(&String, &Trace)> = name_to_trace
             .iter()
@@ -339,7 +344,7 @@ impl PrivateKeyOrganization {
             .unwrap(),
         );
         bar.println("Encrypt data organization A");
-        let result: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> = name_to_trace_vec
+        let result: HashMap<String, (Vec<u16>, Vec<u32>)> = name_to_trace_vec
             .into_par_iter()
             .progress_with(bar)
             .with_finish(ProgressFinish::AndLeave)
@@ -353,7 +358,7 @@ impl PrivateKeyOrganization {
                     ),
                 )
             })
-            .collect::<HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>>();
+            .collect::<HashMap<String, (Vec<u16>, Vec<u32>)>>();
 
         result
     }
@@ -362,14 +367,14 @@ impl PrivateKeyOrganization {
     /// Sample encrypt all activities with their encoded positions.
     /// B can use the sample encryptions to reduce runtime in terms of encryption.
     ///
-    pub fn provide_sample_encryptions(&self) -> HashMap<u16, FheUint16> {
+    pub fn provide_sample_encryptions(&self) -> HashMap<u16, u16> {
         self.pos_to_activity
             .par_iter()
             .map(|(pos, _)| {
                 let pos_u16 = u16::try_from(*pos).unwrap();
                 (pos_u16, self.encrypt_activity(pos_u16, &self.private_key))
             })
-            .collect::<HashMap<u16, FheUint16>>()
+            .collect::<HashMap<u16, u16>>()
     }
 
     ///
@@ -408,7 +413,7 @@ impl PrivateKeyOrganization {
     ///
     pub fn decrypt_edges(
         &self,
-        secret_edges: Vec<(FheUint16, FheUint16)>,
+        secret_edges: Vec<(u16, u16)>,
         bar: &ProgressBar,
     ) -> Vec<(u16, u16)> {
         secret_edges
@@ -495,19 +500,19 @@ impl PrivateKeyOrganization {
 pub struct PublicKeyOrganization {
     event_log: EventLog,
     activity_to_pos: HashMap<String, usize>,
-    own_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<u32>)>,
-    foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>,
-    start: Option<FheUint16>,
-    end: Option<FheUint16>,
+    own_case_to_trace: HashMap<String, (Vec<u16>, Vec<u32>)>,
+    foreign_case_to_trace: HashMap<String, (Vec<u16>, Vec<u32>)>,
+    start: Option<u16>,
+    end: Option<u16>,
     all_case_names: Vec<String>,
-    true_val: FheBool,
+    true_val: bool,
 }
 
 impl PublicKeyOrganization {
     ///
     /// Initialize function
     ///
-    pub fn new(event_log: EventLog, true_val: FheBool) -> Self {
+    pub fn new(event_log: EventLog, true_val: bool) -> Self {
         Self {
             event_log,
             own_case_to_trace: HashMap::new(),
@@ -539,7 +544,7 @@ impl PublicKeyOrganization {
                 .unwrap_or(&(Vec::new(), Vec::new()))
                 .to_owned();
 
-            let (own_activities, _): (Vec<FheUint16>, Vec<u32>) = self
+            let (own_activities, _): (Vec<u16>, Vec<u32>) = self
                 .own_case_to_trace
                 .get(case_name)
                 .unwrap_or(&(Vec::new(), Vec::new()))
@@ -571,7 +576,7 @@ impl PublicKeyOrganization {
     pub fn set_activity_to_pos(
         &mut self,
         activity_to_pos: HashMap<String, usize>,
-        sample_encryptions: &HashMap<u16, FheUint16>,
+        sample_encryptions: &HashMap<u16, u16>,
     ) {
         self.activity_to_pos = activity_to_pos;
         self.start = Some(sample_encryptions.get(&(0)).unwrap().clone());
@@ -581,14 +586,14 @@ impl PublicKeyOrganization {
     ///
     /// Compares two timestamps with a homomorphic operation
     ///
-    fn comparison_fn(&self, val1: &FheUint32, val2: &u32) -> FheBool {
-        val1.le(*val2)
+    fn comparison_fn(&self, val1: &u32, val2: &u32) -> bool {
+        val1 <= val2
     }
 
     ///
     /// Sanitizes the activities encoded and encrypted by A
     ///
-    pub fn sanitize_sample_encryptions(&self, sample_encryptions: &mut HashMap<u16, FheUint16>) {
+    pub fn sanitize_sample_encryptions(&self, sample_encryptions: &mut HashMap<u16, u16>) {
         sample_encryptions.iter().for_each(|(val, _)| {
             if *val >= u16::try_from(sample_encryptions.len()).unwrap_or(0) {
                 panic!()
@@ -600,16 +605,19 @@ impl PublicKeyOrganization {
         sample_encryptions
             .par_iter_mut()
             .for_each(|(val, encrypted_val)| {
-                *encrypted_val = encrypted_val.eq(*val).select(encrypted_val, &zero);
+                // *encrypted_val = encrypted_val.eq(*val).select(encrypted_val, &zero);
+                if encrypted_val != val {
+                    *encrypted_val = zero;
+                }
             })
     }
 
     pub fn find_shared_case_ids(
         &self,
-        foreign_case_ids: &Vec<FheUint64>,
+        foreign_case_ids: &Vec<u64>,
         case_id_hom_comparisons: &mut u64,
         case_id_hom_selections: &mut u64,
-    ) -> Vec<(usize, FheBool)> {
+    ) -> Vec<(usize, bool)> {
         let own_case_ids = self
             .event_log
             .traces
@@ -644,7 +652,7 @@ impl PublicKeyOrganization {
             .map(|(pos, case_id)| {
                 let mut curr_case_id_hom_comparisons = 0;
                 let mut curr_case_id_hom_selections = 0;
-                let is_matching: FheBool = self.has_matching_case_id(
+                let is_matching: bool = self.has_matching_case_id(
                     case_id,
                     &own_case_ids,
                     &mut curr_case_id_hom_comparisons,
@@ -690,16 +698,19 @@ impl PublicKeyOrganization {
 
     fn has_matching_case_id(
         &self,
-        foreign_case_id: &FheUint64,
+        foreign_case_id: &u64,
         own_case_ids: &Vec<u64>,
         case_id_hom_comparisons: &mut u64,
         case_id_sel_hom_comparisons: &mut u64,
-    ) -> FheBool {
-        let mut result = FheBool::not(self.true_val.clone());
+    ) -> bool {
+        let mut result = bool::not(self.true_val.clone());
         *case_id_sel_hom_comparisons += 1;
 
-        own_case_ids.iter().for_each(|&case_id| {
-            result = foreign_case_id.eq(case_id).select(&self.true_val, &result);
+        own_case_ids.iter().for_each(|case_id| {
+            if foreign_case_id.eq(case_id) {
+                result = self.true_val;
+            }
+
             *case_id_hom_comparisons += 1;
             *case_id_sel_hom_comparisons += 1;
         });
@@ -712,9 +723,9 @@ impl PublicKeyOrganization {
     ///
     pub fn set_foreign_case_to_trace(
         &mut self,
-        mut foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>,
+        mut foreign_case_to_trace: HashMap<String, (Vec<u16>, Vec<u32>)>,
     ) {
-        let max_activities: u16 = u16::try_from(self.activity_to_pos.len() - 1).unwrap_or(0);
+        let mut max_activities: u16 = u16::try_from(self.activity_to_pos.len() - 1).unwrap_or(0);
 
         let len = foreign_case_to_trace.len() as u64;
         let bar = ProgressBar::new(len);
@@ -732,7 +743,9 @@ impl PublicKeyOrganization {
             .with_finish(ProgressFinish::AndLeave)
             .for_each(|(_, (foreign_activities, _))| {
                 foreign_activities.iter_mut().for_each(|act| {
-                    *act = act.max(max_activities);
+                    if *act > max_activities {
+                        *act = max_activities;
+                    }
                 });
             });
 
@@ -766,7 +779,7 @@ impl PublicKeyOrganization {
     ///
     /// Encrypts all data in organization B
     ///
-    pub fn encrypt_all_data(&mut self, sample_encryptions: &HashMap<u16, FheUint16>) {
+    pub fn encrypt_all_data(&mut self, sample_encryptions: &HashMap<u16, u16>) {
         self.own_case_to_trace = self.compute_case_to_trace_using_sample_encryption(
             &self.activity_to_pos,
             &self.event_log,
@@ -782,10 +795,10 @@ impl PublicKeyOrganization {
         start_case: usize,
         upper_bound: usize,
         bar: &ProgressBar,
-        timestamp_hom_comparisons: &mut u64, 
+        timestamp_hom_comparisons: &mut u64,
         selection_hom_comparisons: &mut u64,
-    ) -> Vec<(FheUint16, FheUint16)> {
-        let intermediate_result: Vec<(Vec<(FheUint16, FheUint16)>, u64, u64)> = self
+    ) -> Vec<(u16, u16)> {
+        let intermediate_result: Vec<(Vec<(u16, u16)>, u64, u64)> = self
             .all_case_names
             .get(start_case..upper_bound)
             .unwrap()
@@ -793,14 +806,14 @@ impl PublicKeyOrganization {
             .map(|case_name| {
                 let mut local_timestamp_hom_comparisons: u64 = 0;
                 let mut local_selection_hom_comparisons: u64 = 0;
-                
+
                 let (foreign_activities, foreign_timestamps) = self
                     .foreign_case_to_trace
                     .get(case_name)
                     .unwrap_or(&(Vec::new(), Vec::new()))
                     .to_owned();
 
-                let (own_activities, own_timestamps): (Vec<FheUint16>, Vec<u32>) = self
+                let (own_activities, own_timestamps): (Vec<u16>, Vec<u32>) = self
                     .own_case_to_trace
                     .get(case_name)
                     .unwrap_or(&(Vec::new(), Vec::new()))
@@ -816,19 +829,26 @@ impl PublicKeyOrganization {
                 );
 
                 bar.inc(1);
-                (intermediate_result, local_timestamp_hom_comparisons, local_selection_hom_comparisons)
+                (
+                    intermediate_result,
+                    local_timestamp_hom_comparisons,
+                    local_selection_hom_comparisons,
+                )
             })
             .collect::<Vec<_>>();
 
-        intermediate_result.iter().for_each(|(_, local_timestamp_hom_comparisons, local_selection_hom_comparisons)| {
-            *timestamp_hom_comparisons += local_timestamp_hom_comparisons;
-            *selection_hom_comparisons += local_selection_hom_comparisons;
-        });
-        
-        let mut result = intermediate_result.iter().flat_map(|(edges, _, _)| {
-            edges.to_owned()
-        }).collect::<Vec<_>>();
-        
+        intermediate_result.iter().for_each(
+            |(_, local_timestamp_hom_comparisons, local_selection_hom_comparisons)| {
+                *timestamp_hom_comparisons += local_timestamp_hom_comparisons;
+                *selection_hom_comparisons += local_selection_hom_comparisons;
+            },
+        );
+
+        let mut result = intermediate_result
+            .iter()
+            .flat_map(|(edges, _, _)| edges.to_owned())
+            .collect::<Vec<_>>();
+
         result.shuffle(&mut rng());
         result
     }
@@ -838,14 +858,14 @@ impl PublicKeyOrganization {
     ///
     fn find_secrets_for_case(
         &self,
-        foreign_activities: Vec<FheUint16>,
-        foreign_timestamps: Vec<FheUint32>,
-        own_activities: Vec<FheUint16>,
+        foreign_activities: Vec<u16>,
+        foreign_timestamps: Vec<u32>,
+        own_activities: Vec<u16>,
         own_timestamps: Vec<u32>,
         timestamp_hom_comparisons: &mut u64,
         selection_hom_comparisons: &mut u64,
-    ) -> Vec<(FheUint16, FheUint16)> {
-        let mut result: Vec<(FheUint16, FheUint16)> = Vec::new();
+    ) -> Vec<(u16, u16)> {
+        let mut result: Vec<(u16, u16)> = Vec::new();
 
         if own_activities.is_empty() {
             self.add_full_trace(&foreign_activities, &mut result);
@@ -855,8 +875,8 @@ impl PublicKeyOrganization {
             return result;
         }
 
-        let mut comparison_foreign_to_own: HashMap<(usize, usize), FheBool> = HashMap::new();
-        let mut comparison_own_to_foreign: HashMap<(usize, usize), FheBool> = HashMap::new();
+        let mut comparison_foreign_to_own: HashMap<(usize, usize), bool> = HashMap::new();
+        let mut comparison_own_to_foreign: HashMap<(usize, usize), bool> = HashMap::new();
         for (i, foreign_timestamp) in foreign_timestamps.iter().enumerate() {
             for (j, &own_timestamp) in own_timestamps.iter().enumerate() {
                 let foreign_less_equal_own = self.comparison_fn(foreign_timestamp, &own_timestamp);
@@ -870,10 +890,11 @@ impl PublicKeyOrganization {
         // Find start
         result.push((
             self.start.as_ref().unwrap().clone(),
-            comparison_foreign_to_own
-                .get(&(0, 0))
-                .unwrap()
-                .select(&foreign_activities[0], &own_activities[0]),
+            if *comparison_foreign_to_own.get(&(0, 0)).unwrap() {
+                foreign_activities[0]
+            } else {
+                own_activities[0]
+            },
         ));
         *selection_hom_comparisons += 1;
 
@@ -893,7 +914,7 @@ impl PublicKeyOrganization {
                         ),
                     )
                 })
-                .collect::<Vec<(FheUint16, FheUint16)>>(),
+                .collect::<Vec<(u16, u16)>>(),
         );
 
         result.extend(
@@ -912,7 +933,7 @@ impl PublicKeyOrganization {
                         ),
                     )
                 })
-                .collect::<Vec<(FheUint16, FheUint16)>>(),
+                .collect::<Vec<(u16, u16)>>(),
         );
 
         result.push((
@@ -924,7 +945,7 @@ impl PublicKeyOrganization {
             ),
         ));
         *selection_hom_comparisons += 1;
-        
+
         result.push((
             own_activities.last().unwrap().clone(),
             self.handle_last(
@@ -941,11 +962,7 @@ impl PublicKeyOrganization {
     ///
     /// Adds a trace without homomorphic operations if the other trace is empty
     ///
-    fn add_full_trace(
-        &self,
-        activities: &Vec<FheUint16>,
-        result: &mut Vec<(FheUint16, FheUint16)>,
-    ) {
+    fn add_full_trace(&self, activities: &Vec<u16>, result: &mut Vec<(u16, u16)>) {
         if !activities.is_empty() {
             result.push((
                 self.start.as_ref().unwrap().clone(),
@@ -971,15 +988,16 @@ impl PublicKeyOrganization {
     fn handle_last(
         &self,
         pos: usize,
-        other_activities: &Vec<FheUint16>,
-        comparison_this_to_other: &HashMap<(usize, usize), FheBool>,
-    ) -> FheUint16 {
-        let mut result: FheUint16 = self.end.as_ref().unwrap().clone();
+        other_activities: &Vec<u16>,
+        comparison_this_to_other: &HashMap<(usize, usize), bool>,
+    ) -> u16 {
+        let mut result: u16 = self.end.as_ref().unwrap().clone();
         for i in (0..other_activities.len()).rev() {
-            result = comparison_this_to_other
+            if *comparison_this_to_other
                 .get(&(pos, i))
-                .unwrap()
-                .select(other_activities.get(i).unwrap(), &result);
+                .unwrap() {
+                result = *other_activities.get(i).unwrap();
+            }
         }
         result
     }
@@ -990,25 +1008,30 @@ impl PublicKeyOrganization {
     fn find_following_activity(
         &self,
         pos: usize,
-        next_activity: &FheUint16,
-        other_activities: &Vec<FheUint16>,
-        comparison_this_to_other: &HashMap<(usize, usize), FheBool>,
-        comparison_other_to_this: &HashMap<(usize, usize), FheBool>,
+        next_activity: &u16,
+        other_activities: &Vec<u16>,
+        comparison_this_to_other: &HashMap<(usize, usize), bool>,
+        comparison_other_to_this: &HashMap<(usize, usize), bool>,
         selection_hom_comparisons: &mut u64,
-    ) -> FheUint16 {
-        let mut result: FheUint16 = next_activity.clone();
+    ) -> u16 {
+        let mut result: u16 = next_activity.clone();
 
         for i in (0..other_activities.len()).rev() {
-            let intermediate_result = comparison_other_to_this
+            let intermediate_result;
+            if *comparison_other_to_this
                 .get(&(i, pos + 1))
-                .unwrap()
-                .select(other_activities.get(i).unwrap(), next_activity);
+                .unwrap() {
+                intermediate_result = *other_activities.get(i).unwrap();
+            } else {
+                intermediate_result = *next_activity;
+            }
             *selection_hom_comparisons += 1;
-            
-            result = comparison_this_to_other
+
+            if *comparison_this_to_other
                 .get(&(pos, i))
-                .unwrap()
-                .select(&intermediate_result, &result);
+                .unwrap() {
+                result = intermediate_result;
+            }
             *selection_hom_comparisons += 1;
         }
 
@@ -1022,8 +1045,8 @@ impl PublicKeyOrganization {
         &self,
         activity_to_pos: &HashMap<String, usize>,
         trace: &Trace,
-        sample_encryptions: &HashMap<u16, FheUint16>, // debug: bool,
-    ) -> (Vec<FheUint16>, Vec<u32>) {
+        sample_encryptions: &HashMap<u16, u16>, // debug: bool,
+    ) -> (Vec<u16>, Vec<u32>) {
         let classifier = EventLogClassifier::default();
 
         trace
@@ -1038,7 +1061,7 @@ impl PublicKeyOrganization {
                     get_timestamp(event),
                 )
             })
-            .collect::<(Vec<FheUint16>, Vec<u32>)>()
+            .collect::<(Vec<u16>, Vec<u32>)>()
     }
 
     ///
@@ -1048,8 +1071,8 @@ impl PublicKeyOrganization {
         &self,
         activity_to_pos: &HashMap<String, usize>,
         event_log: &EventLog,
-        sample_encryptions: &HashMap<u16, FheUint16>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<u32>)> {
+        sample_encryptions: &HashMap<u16, u16>,
+    ) -> HashMap<String, (Vec<u16>, Vec<u32>)> {
         let name_to_trace: HashMap<&String, &Trace> = utils::find_name_trace_dictionary(event_log);
         let name_to_trace_vec: Vec<(&String, &Trace)> =
             name_to_trace.iter().map(|(&k, &v)| (k, v)).collect();
@@ -1077,6 +1100,6 @@ impl PublicKeyOrganization {
                     ),
                 )
             })
-            .collect::<HashMap<String, (Vec<FheUint16>, Vec<u32>)>>()
+            .collect::<HashMap<String, (Vec<u16>, Vec<u32>)>>()
     }
 }
