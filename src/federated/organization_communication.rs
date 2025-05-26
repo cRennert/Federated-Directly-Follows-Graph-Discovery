@@ -158,8 +158,25 @@ pub fn communicate<'a>(
     org_a.update_graph_with_private_cases(&mut graph, &org_a_case_ids, &shared_case_ids);
 
     utils::recalculate_activity_counts(&mut graph);
-    graph.start_activities.insert("start".to_string());
-    graph.end_activities.insert("end".to_string());
+
+    graph.directly_follows_relations = graph
+        .directly_follows_relations
+        .iter()
+        .filter_map(|((from, to), freq)| {
+            if from.eq("start") {
+                graph.start_activities.insert(to.to_string());
+                None
+            } else if to.eq("end") {
+                graph.end_activities.insert(from.to_string());
+                None
+            } else {
+                Some(((from.clone(), to.clone()), *freq))
+            }
+        })
+        .collect::<HashMap<_, _>>();
+    graph.activities.remove("start");
+    graph.activities.remove("end");
+
     let time_elapsed_computing_dfg = time_start_computing_dfg.elapsed().as_millis();
     println!(
         "DFG from decrypted edges - Time elapsed is {}ms",
