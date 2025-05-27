@@ -85,7 +85,7 @@ pub fn communicate<'a>(
 
     println!("Encrypt & encode data for organization A");
     let time_start_encrypt_org_a = Instant::now();
-    let org_a_encrypted_data: HashMap<String, (Vec<u16>, Vec<u32>)> =
+    let org_a_encrypted_data: HashMap<String, (Vec<u16>, Vec<u64>)> =
         org_a.encrypt_all_data(&shared_case_ids);
     org_b.set_foreign_case_to_trace(org_a_encrypted_data);
     org_b.compute_all_case_names();
