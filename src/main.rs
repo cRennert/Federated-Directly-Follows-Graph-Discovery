@@ -49,7 +49,7 @@ fn main() -> std::io::Result<()> {
     let time_elapsed = time_start.elapsed().as_millis();
     println!("Time elapsed is {}ms", time_elapsed);
 
-    export_dfg_image_png(&result, &output_file.clone().add(".png")).unwrap();
+    // export_dfg_image_png(&result, &output_file.clone().add(".png")).unwrap();
     let file = File::create(output_file)?;
     let mut writer = BufWriter::new(file);
     writeln!(writer, "{}", result.to_json())?;
