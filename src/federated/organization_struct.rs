@@ -48,13 +48,13 @@ pub fn find_activities(event_log: &EventLog) -> HashSet<String> {
 ///
 /// Returns: u32 The timestamp of the event.
 ///
-pub fn get_timestamp(event: &Event) -> u32 {
+pub fn get_timestamp(event: &Event) -> u64 {
     event
         .attributes
         .get_by_key("time:timestamp")
         .and_then(|t| t.value.try_as_date())
         .unwrap()
-        .timestamp() as u32
+        .timestamp_millis() as u64
 }
 
 ///
@@ -107,11 +107,11 @@ impl PrivateKeyOrganization {
     ///
     /// Encrypts a timestamp using the private key
     ///
-    pub fn encrypt_timestamp(&self, value: u32, private_key: &ClientKey) -> FheUint32 {
+    pub fn encrypt_timestamp(&self, value: u64, private_key: &ClientKey) -> FheUint64 {
         if self.debug {
-            FheUint32::encrypt_trivial(value)
+            FheUint64::encrypt_trivial(value)
         } else {
-            FheUint32::encrypt(value, private_key)
+            FheUint64::encrypt(value, private_key)
         }
     }
 
@@ -147,7 +147,7 @@ impl PrivateKeyOrganization {
     pub fn encrypt_all_data(
         &self,
         shared_case_ids: &HashSet<String>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> {
+    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)> {
         self.compute_case_to_trace_with_encryption(
             &self.activity_to_pos,
             &self.private_key,
@@ -292,9 +292,9 @@ impl PrivateKeyOrganization {
         activity_to_pos: &HashMap<String, usize>,
         private_key: &ClientKey,
         trace: &Trace,
-    ) -> (Vec<FheUint16>, Vec<FheUint32>) {
+    ) -> (Vec<FheUint16>, Vec<FheUint64>) {
         let mut activities: Vec<FheUint16> = Vec::with_capacity(trace.events.len());
-        let mut timestamps: Vec<FheUint32> = Vec::with_capacity(trace.events.len());
+        let mut timestamps: Vec<FheUint64> = Vec::with_capacity(trace.events.len());
 
         let classifier = EventLogClassifier::default();
 
@@ -318,7 +318,7 @@ impl PrivateKeyOrganization {
         private_key: &ClientKey,
         event_log: &EventLog,
         shared_case_ids: &HashSet<String>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> {
+    ) -> HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)> {
         let name_to_trace: HashMap<&String, &Trace> = utils::find_name_trace_dictionary(event_log);
         let name_to_trace_vec: Vec<(&String, &Trace)> = name_to_trace
             .iter()
@@ -339,7 +339,7 @@ impl PrivateKeyOrganization {
             .unwrap(),
         );
         bar.println("Encrypt data organization A");
-        let result: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)> = name_to_trace_vec
+        let result: HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)> = name_to_trace_vec
             .into_par_iter()
             .progress_with(bar)
             .with_finish(ProgressFinish::AndLeave)
@@ -353,7 +353,7 @@ impl PrivateKeyOrganization {
                     ),
                 )
             })
-            .collect::<HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>>();
+            .collect::<HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)>>();
 
         result
     }
@@ -495,8 +495,8 @@ impl PrivateKeyOrganization {
 pub struct PublicKeyOrganization {
     event_log: EventLog,
     activity_to_pos: HashMap<String, usize>,
-    own_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<u32>)>,
-    foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>,
+    own_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<u64>)>,
+    foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)>,
     start: Option<FheUint16>,
     end: Option<FheUint16>,
     all_case_names: Vec<String>,
@@ -539,7 +539,7 @@ impl PublicKeyOrganization {
                 .unwrap_or(&(Vec::new(), Vec::new()))
                 .to_owned();
 
-            let (own_activities, _): (Vec<FheUint16>, Vec<u32>) = self
+            let (own_activities, _): (Vec<FheUint16>, Vec<u64>) = self
                 .own_case_to_trace
                 .get(case_name)
                 .unwrap_or(&(Vec::new(), Vec::new()))
@@ -581,7 +581,7 @@ impl PublicKeyOrganization {
     ///
     /// Compares two timestamps with a homomorphic operation
     ///
-    fn comparison_fn(&self, val1: &FheUint32, val2: &u32) -> FheBool {
+    fn comparison_fn(&self, val1: &FheUint64, val2: &u64) -> FheBool {
         val1.le(*val2)
     }
 
@@ -712,7 +712,7 @@ impl PublicKeyOrganization {
     ///
     pub fn set_foreign_case_to_trace(
         &mut self,
-        mut foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint32>)>,
+        mut foreign_case_to_trace: HashMap<String, (Vec<FheUint16>, Vec<FheUint64>)>,
     ) {
         let max_activities: u16 = u16::try_from(self.activity_to_pos.len() - 1).unwrap_or(0);
 
@@ -800,7 +800,7 @@ impl PublicKeyOrganization {
                     .unwrap_or(&(Vec::new(), Vec::new()))
                     .to_owned();
 
-                let (own_activities, own_timestamps): (Vec<FheUint16>, Vec<u32>) = self
+                let (own_activities, own_timestamps): (Vec<FheUint16>, Vec<u64>) = self
                     .own_case_to_trace
                     .get(case_name)
                     .unwrap_or(&(Vec::new(), Vec::new()))
@@ -839,9 +839,9 @@ impl PublicKeyOrganization {
     fn find_secrets_for_case(
         &self,
         foreign_activities: Vec<FheUint16>,
-        foreign_timestamps: Vec<FheUint32>,
+        foreign_timestamps: Vec<FheUint64>,
         own_activities: Vec<FheUint16>,
-        own_timestamps: Vec<u32>,
+        own_timestamps: Vec<u64>,
         timestamp_hom_comparisons: &mut u64,
         selection_hom_comparisons: &mut u64,
     ) -> Vec<(FheUint16, FheUint16)> {
@@ -1023,7 +1023,7 @@ impl PublicKeyOrganization {
         activity_to_pos: &HashMap<String, usize>,
         trace: &Trace,
         sample_encryptions: &HashMap<u16, FheUint16>, // debug: bool,
-    ) -> (Vec<FheUint16>, Vec<u32>) {
+    ) -> (Vec<FheUint16>, Vec<u64>) {
         let classifier = EventLogClassifier::default();
 
         trace
@@ -1038,7 +1038,7 @@ impl PublicKeyOrganization {
                     get_timestamp(event),
                 )
             })
-            .collect::<(Vec<FheUint16>, Vec<u32>)>()
+            .collect::<(Vec<FheUint16>, Vec<u64>)>()
     }
 
     ///
@@ -1049,7 +1049,7 @@ impl PublicKeyOrganization {
         activity_to_pos: &HashMap<String, usize>,
         event_log: &EventLog,
         sample_encryptions: &HashMap<u16, FheUint16>,
-    ) -> HashMap<String, (Vec<FheUint16>, Vec<u32>)> {
+    ) -> HashMap<String, (Vec<FheUint16>, Vec<u64>)> {
         let name_to_trace: HashMap<&String, &Trace> = utils::find_name_trace_dictionary(event_log);
         let name_to_trace_vec: Vec<(&String, &Trace)> =
             name_to_trace.iter().map(|(&k, &v)| (k, v)).collect();
@@ -1077,6 +1077,6 @@ impl PublicKeyOrganization {
                     ),
                 )
             })
-            .collect::<HashMap<String, (Vec<FheUint16>, Vec<u32>)>>()
+            .collect::<HashMap<String, (Vec<FheUint16>, Vec<u64>)>>()
     }
 }
