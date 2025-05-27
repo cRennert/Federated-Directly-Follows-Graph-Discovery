@@ -20,11 +20,9 @@ pub fn communicate<'a>(
     org_a: &'a mut PrivateKeyOrganization,
     org_b: &'a mut PublicKeyOrganization,
     window_size: usize,
-    use_psi: bool,
 ) -> DirectlyFollowsGraph<'a> {
     // Introduce variables to keep track of homomorphic operations
     let mut case_id_hom_comparisons: u64 = 0;
-    let mut case_id_hom_selections: u64 = 0;
     let mut timestamp_hom_comparisons: u64 = 0;
     let mut selection_hom_comparisons: u64 = 0;
 
@@ -34,39 +32,6 @@ pub fn communicate<'a>(
     let server_key: ServerKey = org_a.get_server_key();
     org_b.set_server_key(server_key);
 
-    let org_a_case_ids;
-    let shared_case_ids: HashSet<String>;
-    if use_psi {
-        println!("Apply private set intersection");
-        let time_start_psi = Instant::now();
-        let result_encryption_case_id_a: (Vec<String>, Vec<u64>) =
-            org_a.encrypt_all_case_ids();
-        org_a_case_ids = result_encryption_case_id_a.0;
-        let encrypted_case_ids = result_encryption_case_id_a.1;
-
-        let shared_case_id_result: Vec<(usize, bool)> = org_b.find_shared_case_ids(
-            &encrypted_case_ids,
-            &mut case_id_hom_comparisons,
-            &mut case_id_hom_selections,
-        );
-        shared_case_ids =
-            org_a.decrypt_and_identify_shared_case_ids(&org_a_case_ids, &shared_case_id_result);
-        let time_elapsed_psi = time_start_psi.elapsed().as_millis();
-        println!("PSI - Time elapsed is {}ms", time_elapsed_psi);
-    } else {
-        println!("Apply set intersection");
-        org_a_case_ids = org_a.get_all_case_ids();
-        shared_case_ids = org_b
-            .get_all_case_ids()
-            .intersection(
-                &org_a_case_ids
-                    .iter()
-                    .map(|case_id| case_id.clone())
-                    .collect(),
-            )
-            .map(|case_id| case_id.clone())
-            .collect();
-    }
 
     println!("Agree on activity encoding");
     let time_start_enconding_agreement = Instant::now();
@@ -85,10 +50,9 @@ pub fn communicate<'a>(
 
     println!("Encrypt & encode data for organization A");
     let time_start_encrypt_org_a = Instant::now();
-    let org_a_encrypted_data: HashMap<String, (Vec<u16>, Vec<u32>)> =
-        org_a.encrypt_all_data(&shared_case_ids);
+    let org_a_encrypted_data: Vec<(u64, u16, u64)> =
+        org_a.encrypt_all_data();
     org_b.set_foreign_case_to_trace(org_a_encrypted_data);
-    org_b.compute_all_case_names();
     let time_elapsed_encrypt_org_a = time_start_encrypt_org_a.elapsed().as_millis();
     println!(
         "Encrypting Organization A data - Time elapsed is {}ms",
@@ -104,7 +68,7 @@ pub fn communicate<'a>(
         time_elapsed_encrypt_org_b
     );
 
-    let max_size: usize = org_b.get_cases_len();
+    let max_size: usize = 1;
     let multi_bar = MultiProgress::new();
     let progress_cases = multi_bar.add(ProgressBar::new(max_size as u64));
     progress_cases.set_style(
@@ -115,7 +79,7 @@ pub fn communicate<'a>(
     );
     progress_cases.tick();
 
-    let progress_decryption = multi_bar.add(ProgressBar::new(org_b.get_secret_edges_len() as u64));
+    let progress_decryption = multi_bar.add(ProgressBar::new(1 as u64));
     progress_decryption.set_style(
         ProgressStyle::with_template(
             "[{elapsed_precise}/{eta_precise} - {per_sec}] {wide_bar} {pos}/{len}",
@@ -127,30 +91,14 @@ pub fn communicate<'a>(
     progress_cases.println("(Find all encrypted edges / Decrypt edges)");
     let time_start_edge_finding = Instant::now();
 
-    let decrypted_edges: Vec<(u16, u16)> = (0..max_size)
-        .step_by(window_size)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .flat_map(|step| {
-            let upper_bound;
-            if step + window_size > max_size {
-                return Vec::new();
-            } else if step + 2 * window_size > max_size {
-                upper_bound = max_size;
-            } else {
-                upper_bound = step + window_size;
-            }
 
-            let org_b_secrets: Vec<(u16, u16)> = org_b.find_all_secrets(
-                step,
-                upper_bound,
-                &progress_cases,
-                &mut timestamp_hom_comparisons,
-                &mut selection_hom_comparisons,
-            );
-            org_a.decrypt_edges(org_b_secrets, &progress_decryption)
-        })
-        .collect::<Vec<(u16, u16)>>();
+    let org_b_secrets: Vec<(u16, u16)> = org_b.find_all_secrets(
+        &progress_cases,
+        &mut case_id_hom_comparisons,
+        &mut timestamp_hom_comparisons,
+        &mut selection_hom_comparisons,
+    );
+    let decrypted_edges = org_a.decrypt_edges(org_b_secrets, &progress_decryption);
 
     progress_cases.finish();
     progress_decryption.finish();
@@ -163,7 +111,6 @@ pub fn communicate<'a>(
     println!("Transform the computed and decrypted edges to a directly-follows graph");
     let time_start_computing_dfg = Instant::now();
     let mut graph: DirectlyFollowsGraph = org_a.evaluate_decrypted_edges_to_dfg(decrypted_edges);
-    org_a.update_graph_with_private_cases(&mut graph, &org_a_case_ids, &shared_case_ids);
 
     utils::recalculate_activity_counts(&mut graph);
 
@@ -191,17 +138,10 @@ pub fn communicate<'a>(
         time_elapsed_computing_dfg
     );
 
-    if use_psi {
-        println!(
-            "Number of case ID equality comparisons: {}",
-            case_id_hom_comparisons
-        );
-        println!(
-            "Number of PSI if then else statements: {}",
-            case_id_hom_selections
-        );
-    }
-
+    println!(
+        "Number of homomorphic case ID comparisons: {}",
+        case_id_hom_comparisons
+    );
     println!(
         "Number of homomorphic timestamp comparions: {}",
         timestamp_hom_comparisons

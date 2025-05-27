@@ -20,7 +20,6 @@ fn main() -> std::io::Result<()> {
     let path2 = args.remove(0);
     let output_file = args.remove(0);
     let debug = args.remove(0).parse::<bool>().unwrap();
-    let use_psi = args.remove(0).parse::<bool>().unwrap();
 
     // read args
     let mut options = XESImportOptions::default();
@@ -46,7 +45,7 @@ fn main() -> std::io::Result<()> {
     let mut org_b = PublicKeyOrganization::new(log2, true_val);
 
     let result: DirectlyFollowsGraph =
-        organization_communication::communicate(&mut org_a, &mut org_b, 100, use_psi);
+        organization_communication::communicate(&mut org_a, &mut org_b, 100);
     let time_elapsed = time_start.elapsed().as_millis();
     println!("Time elapsed is {}ms", time_elapsed);
 
