@@ -1,5 +1,5 @@
 # Federated-Directly-Follows-Graph-Discovery
-BPM 2025 Submission Repository
+ICPM 2025 Submission Repository
 
 ## Structure
 - [data](data): contains the event logs split into an organization A and organization B part
