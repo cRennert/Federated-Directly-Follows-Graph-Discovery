@@ -1,0 +1,1 @@
+{"activities":{"Accepted":1581,"Completed":387,"Queued":383},"directly_follows_relations":[[["Accepted","Queued"],269],[["Accepted","Completed"],386],[["Queued","Queued"],55],[["Queued","Accepted"],235],[["Completed","Accepted"],31],[["Accepted","Accepted"],556]],"start_activities":["Queued","Completed","Accepted"],"end_activities":["Accepted","Queued","Completed"]}
