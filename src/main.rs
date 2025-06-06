@@ -1,4 +1,4 @@
-use process_mining::dfg::image_export::export_dfg_image_png;
+use process_mining::dfg::image_export::export_dfg_image_svg;
 use process_mining::dfg::DirectlyFollowsGraph;
 use process_mining::{import_xes_file, XESImportOptions};
 use std::env;
@@ -50,7 +50,7 @@ fn main() -> std::io::Result<()> {
     let time_elapsed = time_start.elapsed().as_millis();
     println!("Time elapsed is {}ms", time_elapsed);
 
-    export_dfg_image_png(&result, &output_file.clone().add(".png")).unwrap();
+    export_dfg_image_svg(&result, &output_file.clone().add(".svg")).unwrap();
     let file = File::create(output_file)?;
     let mut writer = BufWriter::new(file);
     writeln!(writer, "{}", result.to_json())?;
